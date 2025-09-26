@@ -1,20 +1,33 @@
-/*
-const { renderToString } = require('react-dom/server');
-import React from 'react';
-import AssessmentReport from './AssessmentReport';
-const mapData = require("../config/dataMapper").default;
+
+
+const { mapData } = require("../config/dataMapper.mjs");
+const AssessmentReport = require('../components/AssessmentReport'); 
 const puppeteer = require('puppeteer');
 const path = require('path');
+const React = require('react');
+const { renderToString } = require('react-dom/server');
 const fs = require("fs");
 
-const generateReport = async (req, res) => {
+// Your custom component
+
+
+const reportDashboard = async(req,res)=>{
+  const user = req.user;
+  res.render('../views/generateReport.ejs',{user});
+}
+
+
+const generatePdfFromSession = async (req, res) => {
   const sessionId = req.params.id;
   if (!sessionId) {
-    return res.status(400).json({ error: "sessionId is required" });
+    res.statusCode = 400;
+    return next(new Error("Session ID required"));
   }
 
   try {
-    const reportData = mapData(sessionId);
+    const reportData = mapData(sessionId); // must return { record, classifications, cards, notes }
+    //res.json(reportData);
+    
     const html = renderToString(
       React.createElement(AssessmentReport, { data: reportData })
     );
@@ -35,20 +48,15 @@ const generateReport = async (req, res) => {
               print-color-adjust: exact !important;
               padding: 0;
               margin: 0;
-            }
-            .page-break {
-              page-break-before: always;
-            }
-            .no-break {
-              page-break-inside: avoid;
+              background: white;
+              font-family: system-ui, sans-serif;
             }
             .section {
-              margin-bottom: 20px;
               page-break-inside: avoid;
+              margin-bottom: 30px;
             }
             .exercise-card {
               page-break-inside: avoid;
-              margin-bottom: 15px;
             }
           </style>
         </head>
@@ -58,27 +66,27 @@ const generateReport = async (req, res) => {
       </html>
     `;
 
-    const reportsDir = path.join(__dirname, "../reports");
+    const reportsDir = path.join(__dirname, '../reports');
     if (!fs.existsSync(reportsDir)) {
       fs.mkdirSync(reportsDir);
     }
 
     const browser = await puppeteer.launch({
       headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
 
     const page = await browser.newPage();
-    
+
     await page.setViewport({
       width: 1240,
       height: 1754,
-      deviceScaleFactor: 2, // Increased for better quality
+      deviceScaleFactor: 2, // For print quality
     });
 
-    await page.setContent(fullHtml, { 
+    await page.setContent(fullHtml, {
       waitUntil: 'networkidle0',
-      timeout: 30000 
+      timeout: 30000,
     });
 
     const pdfPath = path.join(reportsDir, `${sessionId}.pdf`);
@@ -87,38 +95,60 @@ const generateReport = async (req, res) => {
       format: 'A4',
       printBackground: true,
       margin: {
-        top: "30mm",
-        bottom: "30mm",
-        left: "30mm",
-        right: "30mm"
+        top: '30mm',
+        bottom: '30mm',
+        left: '30mm',
+        right: '30mm',
       },
       displayHeaderFooter: true,
-      headerTemplate: '<div></div>',
+      headerTemplate: `
+          <div style="font-size:12px; width:100%; padding: 20px 0; border-bottom: 2px solid #ccc; font-family: 'Arial', sans-serif; background-color: #f1f8ff; color: #333;">
+            <!-- Company Name Section -->
+            <div style="text-align: center; color: #2E86C1; font-size: 20px; font-weight: bold; letter-spacing: 1px;">
+              <span class="company-name">AllyCare</span>
+            </div>
+            
+            <!-- Report Title Section -->
+            <div style="text-align: center; color: #555; font-size: 16px; margin-top: 5px; font-weight: 500;">
+              AllyCare Assessment Report
+            </div>
+            
+            <!-- User Info and Date Section -->
+            <div style="margin-top: 15px; display: flex; justify-content: space-between; color: #777; font-size: 14px; padding: 0 30px;">
+              <div style="font-size: 14px;">
+                <strong>Name:</strong> <span class="user-name">${req.user.username}</span><br/>
+              </div>
+              
+              <div style="text-align: right;">
+                <strong>Date:</strong> <span class="current-date">${new Date().toLocaleDateString()}</span><br/>
+              </div>
+            </div>
+          </div>
+        `,
+
       footerTemplate: `
         <div style="font-size: 10px; text-align: center; width: 100%; margin: 0 50px;">
           <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
         </div>
       `,
-      scale: 0.9, // Slightly reduce content size for better fit
+      scale: 0.9,
     });
 
     await browser.close();
 
     res.download(pdfPath, `${reportData.assessmentName}_${sessionId}.pdf`, (err) => {
       if (err) {
-        console.error("Error sending file:", err);
-        return res.status(500).json({ error: "Error sending PDF file" });
+        console.error('Error sending file:', err);
+        return res.status(500).json({ error: 'Error sending PDF file' });
       }
     });
-
   } catch (error) {
-    console.error("Error generating report:", error);
-    res.status(500).json({ error: error.message });
+    console.error('PDF generation failed:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 };
-*/
-const reportDashboard = async(req,res)=>{
-  const user = req.user;
-  res.render('../views/generateReport.ejs',{user});
-}
-module.exports = { reportDashboard };
+
+module.exports = { 
+  reportDashboard,
+  generatePdfFromSession
+};
