@@ -1,11 +1,11 @@
-import data from "../data.js";
-import assessments from "./assessments.js";
-import * as classifications from "./classifications.js";
+import * as data from '../data.js';
+import * as structuredRecord from './structuredRecord.js';
+import * as classifications from './classifications.js';
 
 
 function getValueByPath(obj, path) {
   try {
-    return path.split('.').reduce((acc, key) => acc && acc[key], obj) || 'N/A';
+    return path.split('.').reduce((acc, key) => acc && acc[key], obj);
   } catch (error) {
     return 'N/A';
   }
@@ -13,24 +13,25 @@ function getValueByPath(obj, path) {
 
 function classify(value, rules) {
   if (!rules || value === 'N/A') return null;
+
   const num = parseFloat(value);
   if (isNaN(num)) return null;
   const rule = rules.find(r => num >= r.min && num < r.max);
   return rule ? rule.label : null;
 }
 
-function mapData(sessionId) {
+export const mapData = (sessionId,next)=>{
   const sessionData = data[sessionId];
   console.log("Available sessions:", Object.keys(data));
   console.log("Requested sessionId:", sessionId);
-  if (!sessionData) throw new Error(`No session found for id: ${sessionId}`);
+  if (!sessionData) next(new Error(`No session found for id: ${sessionId}`));
 
-  const assessmentConfig = assessments[sessionData.assessment_id];
-  if (!assessmentConfig) throw new Error(`No config found for assessment_id: ${sessionData.assessment_id}`);
+  const record = structuredRecord[sessionData.assessment_id];
+  if (!record) next(new Error(`No record found for assessment_id: ${sessionData.assessment_id}`));
 
   const result = [];
 
-  assessmentConfig.sections.forEach(section => {
+  record.sections.forEach(section => {
     if (section.dynamic === "exercises") {
       result.push({
         title: "Exercise Performance",
@@ -67,9 +68,8 @@ function mapData(sessionId) {
 
   return {
     session_id: sessionData.session_id,
-    assessmentName: assessmentConfig.assessmentName,
+    assessmentName: record.assessmentName,
     sections: result
   };
 }
 
-export default mapData;
